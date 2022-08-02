@@ -1,6 +1,11 @@
 #include "UIWindow.h"
 #include <rendering/Renderer.h>
+#include <widgets/FlowPanel.h>
 #include <chrono>
+
+#ifdef MC_PLATFORM_MACOS
+#include <platform/macos/OSXNativeWindow.h>
+#endif
 
 namespace mc {
     // Specifies that only the first created window should be the root window
@@ -20,7 +25,6 @@ namespace mc {
         d_nativeWindow->setWidth(width);
         d_nativeWindow->setHeight(height);
         d_nativeWindow->setTitle(title);
-        d_nativeWindow->setUpdateCallback([this]() { this->update(); });
 
         d_nativeWindow->show();
 
@@ -33,6 +37,12 @@ namespace mc {
             auto width = event->get<uint32_t>("width");
             auto height = event->get<uint32_t>("height");
 
+            // If the body flowpanel is present, stretch
+            // the body panel to fit into the window.
+            if (d_bodyPanel) {
+                adjustBodyPanel();
+            }
+
             setShouldRedraw();
         });
 
@@ -42,6 +52,13 @@ namespace mc {
             if (focused) {
                 setShouldRedraw();
             }
+        });
+
+        // For high-frequency events such as mouseMoved, the window
+        // should swap buffers immediately after rendering to produce
+        // a smooth update of display and prevent the visual lag.
+        on("mouseMoved", [this](Shared<Event> e) {
+            _requestOnDemandBufferSwap();
         });
 
         // Setup the background rendering thread
@@ -84,6 +101,9 @@ namespace mc {
                 std::static_pointer_cast<KeyUpEvent>(e)
             );
         });
+
+        // Pass the update callback to the native window
+        d_nativeWindow->setUpdateCallback([this]() { this->update(); });
     }
 
     UIWindow::~UIWindow() {
@@ -122,6 +142,22 @@ namespace mc {
     void UIWindow::setSize(uint32_t width, uint32_t height) {
         d_nativeWindow->setWidth(width);
         d_nativeWindow->setHeight(height);
+    }
+
+    void UIWindow::setMinWidth(uint32_t minWidth) {
+        d_nativeWindow->setMinWidth(minWidth);
+    }
+
+    void UIWindow::setMaxWidth(uint32_t maxWidth) {
+        d_nativeWindow->setMaxWidth(maxWidth);
+    }
+
+    void UIWindow::setMinHeight(uint32_t minHeight) {
+        d_nativeWindow->setMinHeight(minHeight);
+    }
+
+    void UIWindow::setMaxHeight(uint32_t maxHeight) {
+        d_nativeWindow->setMaxHeight(maxHeight);
     }
 
     void UIWindow::setPosition(const Position& pos) {
@@ -169,7 +205,25 @@ namespace mc {
     }
 
     void UIWindow::update() {
-        if (!shouldRedraw()) {
+        // Due to the way Cocoa and Direct2D rendering systems don't let you
+        // reliably control the timing of content rendering being called
+        // preventing you from properly synchronizing buffer swapping,
+        // while resizing, the scene has to be re-rendered manually
+        // to the front buffer directly.
+        if (d_nativeWindow->isFrontBufferRenderRequested()) {
+            auto renderTarget = d_nativeWindow->getRenderTarget();
+            renderTarget->lockBackBuffer();
+            renderTarget->beginFrame();
+
+            _renderScene(renderTarget);
+
+            renderTarget->endFrame();
+            renderTarget->unlockBackBuffer();
+            renderTarget->swapBuffers();
+
+            // Complete the request
+            d_nativeWindow->completeFrontBufferRender();
+        } else if (!shouldRedraw()) {
             d_nativeWindow->getRenderTarget()->swapBuffers();
         }
     }
@@ -198,8 +252,45 @@ namespace mc {
         return d_widgetHostController->findWidget(uuid);
     }
 
+    Shared<FlowPanel> UIWindow::getBody() {
+        if (!d_bodyPanel) {
+            d_bodyPanel = MakeRef<FlowPanel>();
+            d_bodyPanel->layout = Horizontal;
+            d_bodyPanel->backgroundColor = Color::transparent;
+            adjustBodyPanel();
+            addWidget(d_bodyPanel);
+        }
+
+        return d_bodyPanel;
+    }
+
+    void UIWindow::setBodyPanelOffset(const Size& offset) {
+        d_bodyPanelOffset = offset;
+        if (d_bodyPanel) {
+            adjustBodyPanel();
+        }
+    }
+
+    void UIWindow::adjustBodyPanel() {
+        d_bodyPanel->position = {
+            static_cast<int32_t>(d_bodyPanelOffset.width),
+            static_cast<int32_t>(d_bodyPanelOffset.height)
+        };
+        d_bodyPanel->size = {
+            static_cast<uint32_t>(getWidth() - d_bodyPanelOffset.width),
+            static_cast<uint32_t>(getHeight() - d_bodyPanelOffset.height)
+        };
+    }
+
     void UIWindow::_backgroundRenderingTask() {
         while (!d_isDestroyed) {
+            // To prevent screen from flickering, the background
+            // thread has to be paused while the window is resizing.
+            if (d_nativeWindow->isFrontBufferRenderRequested()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(16));
+                continue;
+            }
+
             if (shouldRedraw()) {
                 auto renderTarget = d_nativeWindow->getRenderTarget();
                 renderTarget->lockBackBuffer();
@@ -210,7 +301,17 @@ namespace mc {
                 renderTarget->endFrame();
                 renderTarget->unlockBackBuffer();
 
+                if (_shouldSwapBuffersOnDemand()) {
+                    renderTarget->swapBuffers();
+                    _completeOnDemandBufferSwap();
+                }
+
+                // Mark the scene as successfully drawn
                 d_shouldRedrawScene = false;
+
+                // Request the native window to
+                // repaint with the updated contents.
+                d_nativeWindow->requestRedraw();
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(16));

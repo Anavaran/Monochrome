@@ -6,6 +6,8 @@
 #include <atomic>
 
 namespace mc {
+class FlowPanel;
+
 class UIWindow : public EventEmitter {
 public:
     UIWindow(
@@ -24,6 +26,10 @@ public:
     void setWidth(uint32_t width);
     void setHeight(uint32_t height);
     void setSize(uint32_t width, uint32_t height);
+    void setMinWidth(uint32_t minWidth);
+    void setMaxWidth(uint32_t maxWidth);
+    void setMinHeight(uint32_t minHeight);
+    void setMaxHeight(uint32_t maxHeight);
     void setPosition(const Position& pos);
     virtual void setTitle(const std::string& title);
     bool isFocused() const;
@@ -51,9 +57,18 @@ public:
     Color getBackgroundColor() const { return d_backgroundColor; }
     virtual void setBackgroundColor(const Color& color) { d_backgroundColor = color; }
 
+    Shared<FlowPanel> getBody();
+
+protected:
+    void setBodyPanelOffset(const Size& offset);
+
 private:
     Shared<NativeWindow> d_nativeWindow = nullptr;
     Shared<WidgetHostController> d_widgetHostController = nullptr;
+
+    Shared<FlowPanel>    d_bodyPanel;
+    Size                 d_bodyPanelOffset = { 0, 0 };
+    void adjustBodyPanel();
 
     uuid_t d_uuid = 0;
     std::atomic_bool d_isDestroyed = false;
@@ -62,8 +77,13 @@ private:
     std::thread d_renderingThread;
 
     std::atomic_bool d_shouldRedrawScene = true;
+    std::atomic_bool d_onDemandBufferSwapRequested = false;
 
     void _backgroundRenderingTask();
     void _renderScene(Shared<RenderTarget>& renderTarget);
+
+    inline void _requestOnDemandBufferSwap() { d_onDemandBufferSwapRequested = true; }
+    inline void _completeOnDemandBufferSwap() { d_onDemandBufferSwapRequested = false; }
+    bool _shouldSwapBuffersOnDemand() const { return d_onDemandBufferSwapRequested; }
 };
 } // namespace mc

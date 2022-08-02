@@ -1,23 +1,31 @@
-#include "Renderer.h"
+﻿#include "Renderer.h"
 #include <core/InternalFlags.h>
 #include <application/AppManager.h>
 
 namespace mc {
     std::pair<Position, Size> Renderer::getWidgetTruePositionAndSize(
-        const Shared<BaseWidget>& widget,
+        BaseWidget* widget,
         Position& parentPositionOffset
     ) {
         // Calculating frame dimensions of the widget
-        int32_t xPos = parentPositionOffset.x + widget->position->x + widget->marginLeft;
-        int32_t yPos = parentPositionOffset.y + widget->position->y + widget->marginTop;
+        int32_t xPos = parentPositionOffset.x + widget->position->x;
+        int32_t yPos = parentPositionOffset.y + widget->position->y;
 
-        uint32_t width = widget->size->width - (widget->marginLeft + widget->marginRight);
-        uint32_t height = widget->size->height - (widget->marginBottom + widget->marginTop);
+        // Calculating any necessary changes to the widget's size
+        uint32_t width = widget->size->width;
+        uint32_t height = widget->size->height;
 
         return {
             Position(xPos, yPos),
             Size(width, height)
         };
+    }
+
+    std::pair<Position, Size> Renderer::getWidgetTruePositionAndSize(
+        const Shared<BaseWidget>& widget,
+        Position& parentPositionOffset
+    ) {
+        return getWidgetTruePositionAndSize(widget.get(), parentPositionOffset);
     }
 
     void Renderer::renderScene(
@@ -82,13 +90,27 @@ namespace mc {
                 parentPositionOffset
             );
         } else if (widgetType == "checkbox") {
-            CORE_ASSERT(false, "Rendering 'checkbox' widget is not implemented yet");
+            renderCheckbox(
+                renderTarget,
+                std::static_pointer_cast<Checkbox>(widget),
+                parentPositionOffset
+            );
         } else if (widgetType == "slider") {
-            CORE_ASSERT(false, "Rendering 'slider' widget is not implemented yet");
+            renderSlider(
+                renderTarget,
+                std::static_pointer_cast<Slider>(widget),
+                parentPositionOffset
+            );
         } else if (widgetType == "entry") {
             renderEntry(
                 renderTarget,
                 std::static_pointer_cast<Entry>(widget),
+                parentPositionOffset
+            );
+        } else if (widgetType == "customRenderedWidget") {
+            renderCustomRenderedWidget(
+                renderTarget,
+                std::dynamic_pointer_cast<IRenderable>(widget),
                 parentPositionOffset
             );
         }
@@ -268,13 +290,157 @@ namespace mc {
         );
     }
 
-    // void Renderer::renderCheckbox() {
+    void Renderer::renderCheckbox(
+        Shared<RenderTarget>& renderTarget,
+        const Shared<Checkbox>& checkbox,
+        Position& parentPositionOffset
+    ) {
+        const auto& [position, size] = getWidgetTruePositionAndSize(checkbox, parentPositionOffset);
 
-    // }
+        uint32_t boxSize = size.height / 5 * 3;
 
-    // void Renderer::renderSlider() {
+        // Draw the body of the checkbox
+        renderTarget->drawRectangle(
+            position.x,
+            position.y + static_cast<int32_t>(size.height / 2 - boxSize / 2),
+            boxSize, boxSize,
+            checkbox->checked ? checkbox->checkedColor : checkbox->backgroundColor,
+            checkbox->cornerRadius,
+            checkbox->filled,
+            checkbox->stroke
+        );
 
-    // }
+        // Draw the border around the checkbox
+        renderTarget->drawRectangle(
+            position.x + static_cast<int32_t>(checkbox->stroke * 2),
+            position.y + static_cast<int32_t>(size.height / 2 - boxSize / 2),
+            boxSize, boxSize,
+            checkbox->borderColor,
+            checkbox->cornerRadius,
+            false,
+            checkbox->borderSize
+        );
+
+        // Draw the checkmark inside the checkbox if it's checked
+        if (checkbox->checked && checkbox->displayCheckmark) {
+            renderTarget->drawText(
+                position.x + static_cast<int32_t>(checkbox->stroke * 2),
+                position.y + static_cast<int32_t>(size.height / 2 - boxSize / 2),
+                boxSize, boxSize,
+                checkbox->checkmarkColor,
+                L"✔",
+                "Arial",
+                checkbox->fontSize,
+                "light"
+            );
+        }
+
+        // Draw the text next to the checkbox
+        renderTarget->drawText(
+            position.x + boxSize + checkbox->textMargin,
+            position.y,
+            size.width - boxSize + checkbox->textMargin,
+            size.height,
+            checkbox->color,
+            checkbox->text.get(),
+            checkbox->font,
+            checkbox->fontSize,
+            checkbox->fontStyle,
+            checkbox->alignment,
+            checkbox->wordWrapMode
+        );
+    }
+
+     void Renderer::renderSlider(
+        Shared<RenderTarget>& renderTarget,
+        const Shared<Slider>& slider,
+        Position& parentPositionOffset
+    ) {
+        auto [position, size] = getWidgetTruePositionAndSize(slider, parentPositionOffset);
+
+        // Helper values calculations
+        int32_t sliderBarHeight = static_cast<int32_t>(size.height / 4);
+        int32_t frameVerticalCenter = static_cast<int32_t>(size.height / 2);
+
+        float valuePercentage =
+        static_cast<float>(slider->value - slider->minValue) /
+        static_cast<float>(slider->maxValue - slider->minValue);
+
+        float knobRadiusF = static_cast<float>(sliderBarHeight * 0.8f);
+        int32_t knobRadius = static_cast<int32_t>(knobRadiusF);
+
+        // The actual visually rendered slider bar should
+        // be shorter than the bounds so that the knob, no
+        // matter the shape, can fit into the bounds at the ends.
+        position.x += (knobRadius * 4); // size of two circular knobs
+        size.width -= (knobRadius * 8);
+
+        // X-position offset of the slider knob
+        float knobOffsetF = valuePercentage * static_cast<float>(size.width);
+        int32_t knobOffset = static_cast<int32_t>(knobOffsetF);
+
+        // Draw the body of the slider
+        renderTarget->drawRectangle(
+            position.x, position.y + frameVerticalCenter - (sliderBarHeight / 2),
+            size.width, sliderBarHeight,
+            slider->color,
+            slider->cornerRadius,
+            true, 0
+        );
+
+        // Color in the region behind the slider knob
+        renderTarget->drawRectangle(
+            position.x, position.y + frameVerticalCenter - (sliderBarHeight / 2),
+            knobOffset, sliderBarHeight,
+            slider->completedValuesColor,
+            slider->cornerRadius,
+            true, 0
+        );
+
+        // Draw tick marks
+        int32_t individualStep = (slider->maxValue - slider->minValue) / slider->increment;
+        int32_t positionalIncrement = static_cast<int32_t>(size.width) / individualStep;
+
+        if (slider->showTickmarks) {
+            for (int32_t posX = position.x;
+                posX < position.x + static_cast<int32_t>(size.width) + positionalIncrement;
+                posX += positionalIncrement
+            ) {
+                renderTarget->drawRectangle(
+                    posX, position.y + sliderBarHeight,
+                    2, size.height / 2,
+                    slider->tickmarkColor,
+                    0, true, 0
+                );
+            }
+        }
+
+        // Draw the slider knob
+        if (slider->circularKnob) {
+            int32_t knobPosY =
+                frameVerticalCenter - (sliderBarHeight / 2) -
+                static_cast<int32_t>(static_cast<float>(knobRadius * 1.75f));
+
+            renderTarget->drawCircle(
+                position.x + knobOffset - knobRadius,
+                position.y + knobPosY,
+                knobRadius,
+                slider->knobColor,
+                true, 0
+            );
+        } else {
+            float knobWidthF = static_cast<float>(size.width) * 0.04f;
+            int32_t knobWidth = static_cast<int32_t>(knobWidthF);
+
+            renderTarget->drawRectangle(
+                position.x + knobOffset - (knobWidth / 2),
+                position.y,
+                knobWidth, size.height,
+                slider->knobColor,
+                0, true, 0
+            );
+        }
+    }
 
     void Renderer::renderEntry(
         Shared<RenderTarget>& renderTarget,
@@ -452,5 +618,18 @@ namespace mc {
                 entry->borderSize
             );
         }
+    }
+
+    void Renderer::renderCustomRenderedWidget(
+        Shared<RenderTarget>& renderTarget,
+        const Shared<IRenderable>& renderable,
+        Position& parentPositionOffset
+    ) {
+        const getWidgetBoundsFn_t getWidgetBounds =
+            [](BaseWidget* widget, Position& parentPositionOffset) {
+                return getWidgetTruePositionAndSize(widget, parentPositionOffset);
+            };
+
+        renderable->onRender(renderTarget, parentPositionOffset, getWidgetBounds);
     }
 } // namespace mc

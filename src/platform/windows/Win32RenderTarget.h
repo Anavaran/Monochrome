@@ -32,6 +32,14 @@ public:
         uint32_t stroke
     );
 
+    void drawCircle(
+        int32_t x, int32_t y,
+        uint32_t radius,
+        const Color& color,
+        bool filled,
+        uint32_t stroke
+    );
+
     void drawText(
         int32_t x, int32_t y,
         uint32_t width, uint32_t height,
@@ -44,7 +52,17 @@ public:
         const std::string& wrapMode = "none"
     );
 
-    void __drawFrontBufferBitmap();
+    void drawText(
+        int32_t x, int32_t y,
+        uint32_t width, uint32_t height,
+        const Color& color,
+        const std::wstring& text,
+        const std::string& font,
+        uint32_t fontSize,
+        const std::string& fontStyle = "normal",
+        const std::string& alignment = "center",
+        const std::string& wrapMode = "none"
+    );
 
     std::pair<float, float> runtimeCalculateTextSize(
         uint64_t maxWidth,
@@ -60,8 +78,6 @@ public:
 private:
     HWND d_windowHandle;
     ComPtr<ID2D1HwndRenderTarget> d_nativeWindowRenderTarget;
-    ComPtr<ID2D1BitmapRenderTarget> d_nativeBitmapRenderTarget;
-    ComPtr<ID2D1RenderTarget> d_activeRenderTarget;
 
     uint32_t    d_width;
     uint32_t    d_height;

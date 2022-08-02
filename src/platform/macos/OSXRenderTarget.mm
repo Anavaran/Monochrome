@@ -146,11 +146,67 @@ namespace mc {
 		}
     }
 
+    void OSXRenderTarget::drawCircle(
+        int32_t x, int32_t y,
+        uint32_t radius,
+        const Color& color,
+        bool filled,
+        uint32_t stroke
+    ) {
+        uint32_t size = radius * 2;
+
+        _adjustPositionAndSizeForDPIScaling(x, y, size, size);
+        _convertPositionToCartesianCoordinates(y, size);
+
+        [[NSColor colorWithCalibratedRed:(float)color.r / 255.0f 
+            green:(float)color.g / 255.0f 
+            blue:(float)color.b / 255.0f 
+            alpha:(float)color.a / 255.0f] 
+            set];
+
+		NSRect rect = NSMakeRect(x - radius, y - radius, size, size);
+		NSBezierPath* path = [NSBezierPath bezierPathWithOvalInRect:rect];
+
+		if (filled) {
+			[path fill];
+		}
+        else {
+			[path setLineWidth:stroke];
+			[path stroke];
+		}
+    }
+
     void OSXRenderTarget::drawText(
         int32_t x, int32_t y,
         uint32_t width, uint32_t height,
         const Color& color,
         const std::string& text,
+        const std::string& font,
+        uint32_t fontSize,
+        const std::string& fontStyle,
+        const std::string& alignment,
+        const std::string& wrapMode
+    ) {
+        drawText(
+            x, y,
+            width, height,
+            color,
+            utils::convertToWideString(text),
+            font,
+            fontSize,
+            fontStyle,
+            alignment,
+            wrapMode
+        );
+    }
+
+    void OSXRenderTarget::drawText(
+        int32_t x,
+        int32_t y,
+        uint32_t width,
+        uint32_t height,
+        const Color& color,
+        const std::wstring& text,
         const std::string& font,
         uint32_t fontSize,
         const std::string& fontStyle,
@@ -186,12 +242,8 @@ namespace mc {
 									NSParagraphStyleAttributeName: paragraphStyle
 								};
 
-
-        // Conversion provided text to widestring to support emojis and UTF-8
-        auto wideText = utils::convertToWideString(text);
-
-		NSString* str = [[NSString alloc] initWithBytes:wideText.c_str()
-                                          length:wideText.size() * sizeof(wchar_t)
+		NSString* str = [[NSString alloc] initWithBytes:text.c_str()
+                                          length:text.size() * sizeof(wchar_t)
                                           encoding:NSUTF32LittleEndianStringEncoding];
                                           
 		CGRect frame = [str boundingRectWithSize:NSMakeSize(width, height)

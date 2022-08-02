@@ -1,4 +1,5 @@
 #include "BaseContainerWidget.h"
+#include <algorithm>
 
 namespace mc {
     BaseContainerWidget::BaseContainerWidget() {
@@ -7,6 +8,7 @@ namespace mc {
     }
 
     void BaseContainerWidget::addChild(Shared<BaseWidget> child) {
+        CORE_ASSERT((child.get() != this), "Cannot add widget as its own child");
         CORE_ASSERT(!child->getParent(), "Cannot add child, child widget already has a parent");
         CORE_ASSERT(
             !findChild(child->getID()),
@@ -14,26 +16,27 @@ namespace mc {
         );
 
         d_children.push_back(child);
+        _orderChildrenByZIndex();
+
         child->setParent(this);
         child->forwardEmittedEvent(this, "propertyChanged");
         child->forwardEmittedEvent(this, "requestedFocusGain");
         child->forwardEmittedEvent(this, "requestedFocusLoss");
 
-        fireEvent("childAdded", Event::empty);
-    }
+        // If the child's z-index changes, the container
+        // should reorder all children in ascending order.
+        child->on("zIndexChanged", [this](auto e) {
+            _orderChildrenByZIndex();
+        });
 
-    void BaseContainerWidget::insertChild(Shared<BaseWidget> child, uint64_t index) {
-        CORE_ASSERT(!child->getParent(), "Cannot add child, child widget already has a parent");
-        CORE_ASSERT(
-            !findChild(child->getID()),
-            "Cannot add widget, widget with the given UUID already exists"
-        );
+        if (child->isContainer()) {
+            child->forwardEmittedEvent(this, "childAdded");
+            child->forwardEmittedEvent(this, "childRemoved");
+        }
 
-        d_children.insert(d_children.begin() + index, child);
-        child->setParent(this);
-        child->forwardEmittedEvents(this);
-
-        fireEvent("childAdded", Event::empty);
+        fireEvent("childAdded", {
+            { "child", child.get() }
+        });
     }
 
     bool BaseContainerWidget::removeChild(Shared<BaseWidget> child) {
@@ -43,14 +46,21 @@ namespace mc {
     bool BaseContainerWidget::removeChild(uuid_t uuid) {
         for (auto it = d_children.begin(); it != d_children.end(); ++it) {
             if (it->get()->getID() == uuid) {
+                BaseWidget* widget = it->get();
+
                 // Reset the child's parent
-                it->get()->setParent(nullptr);
+                widget->setParent(nullptr);
+
+                // Remove the zIndexChanged event listenr
+                widget->off("zIndexChanged");
 
                 // Erase the child from the list
                 d_children.erase(it);
 
                 // Fire the childRemoved event
-                fireEvent("childRemoved", Event::empty);
+                fireEvent("childRemoved", {
+                    { "child", widget }
+                });
                 return true;
             }
         }
@@ -77,5 +87,12 @@ namespace mc {
 
     Shared<BaseWidget> BaseContainerWidget::getChild(uint64_t index) {
         return d_children.at(index);
+    }
+
+    void BaseContainerWidget::_orderChildrenByZIndex() {
+        std::sort(d_children.begin(), d_children.end(),
+        [](Shared<BaseWidget> a, Shared<BaseWidget> b) {
+            return a->zIndex.get() < b->zIndex.get();
+        });
     }
 } // namespace mc

@@ -104,6 +104,22 @@ namespace mc {
         _setWindowSize(d_width, d_height);
     }
 
+    void Win32NativeWindow::setMinWidth(uint32_t minWidth) {
+        d_minSize.width = minWidth;
+    }
+
+    void Win32NativeWindow::setMaxWidth(uint32_t maxWidth) {
+        d_maxSize.width = maxWidth;
+    }
+
+    void Win32NativeWindow::setMinHeight(uint32_t minHeight) {
+        d_minSize.height = minHeight;
+    }
+
+    void Win32NativeWindow::setMaxHeight(uint32_t maxHeight) {
+        d_maxSize.height = maxHeight;
+    }
+
     void Win32NativeWindow::setPosition(const Position& pos) {
         d_position = pos;
 
@@ -159,6 +175,10 @@ namespace mc {
 
     void Win32NativeWindow::minimize() {
         ::ShowWindow(d_windowHandle, SW_MINIMIZE);
+    }
+
+    void Win32NativeWindow::requestRedraw() {
+        ::SendMessage(d_windowHandle, WM_PAINT, NULL, NULL);
     }
 
     void Win32NativeWindow::_createWin32Window(uint64_t windowFlags) {
@@ -283,23 +303,6 @@ namespace mc {
         d_renderTarget->resize(d_width, d_height);
     }
 
-    void Win32NativeWindow::updatePlatformWindow() {
-        // Process all messages and events
-        while (PeekMessage(&d_windowProcMessage, d_windowHandle, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&d_windowProcMessage);
-            DispatchMessage(&d_windowProcMessage);
-        }
-
-        auto updateCallback = getUpdateCallback();
-
-        if (updateCallback) {
-            updateCallback();
-        }
-
-        // Draw the render target's front buffer bitmap image
-        std::static_pointer_cast<Win32RenderTarget>(d_renderTarget)->__drawFrontBufferBitmap();
-    }
-
     void Win32NativeWindow::destroyPlatformWindow() {
         ::DestroyWindow(d_windowHandle);
     }
@@ -307,6 +310,14 @@ namespace mc {
     LRESULT
     CALLBACK
     Win32NativeWindow::win32WindowProcCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+        // If there is an update callback from a native window owner, execute it.
+        auto updateCallback = getUpdateCallback();
+
+        if (updateCallback) {
+            updateCallback();
+        }
+
+        // Process the received message
         switch (uMsg) {
         case WM_CLOSE: {
             unregisterNativeWindow(this);
@@ -331,6 +342,7 @@ namespace mc {
 
                 utils::PlacementConstraintSystem::updateContainer(
                     MAIN_SCREEN_CONTAINER_NAME,
+                    Position(info.rcMonitor.left, info.rcMonitor.top),
                     Size(screenWidth, screenHeight)
                 );
             }
@@ -348,6 +360,18 @@ namespace mc {
             });
 
             fireEvent("sizeChanged", resizeEvent);
+
+            // While the window is resizing, the contents of
+            // the window should be rendered on the main thread.
+            requestFrontBufferRender();
+            break;
+        }
+        case WM_GETMINMAXINFO: {
+            LPMINMAXINFO lpMMI = (LPMINMAXINFO)lParam;
+            lpMMI->ptMinTrackSize.x = static_cast<LONG>(d_minSize.width);
+            lpMMI->ptMinTrackSize.y = static_cast<LONG>(d_minSize.height);
+            lpMMI->ptMaxTrackSize.x = static_cast<LONG>(d_maxSize.width);
+            lpMMI->ptMaxTrackSize.y = static_cast<LONG>(d_maxSize.height);
             break;
         }
         case WM_NCHITTEST: {

@@ -13,10 +13,16 @@ set(
     ${cwd}/Panel.h
     ${cwd}/Label.h
     ${cwd}/Button.h
+    ${cwd}/Checkbox.h
+    ${cwd}/Slider.h
     ${cwd}/Entry.h
     ${cwd}/MenuList.h
     ${cwd}/DropdownButton.h
     ${cwd}/Combobox.h
+    ${cwd}/FlowPanel.h
+    ${cwd}/ScrollPanel.h
+    ${cwd}/CustomRenderedWidget.h
+    ${cwd}/WidgetControlFrame.h
 
     PARENT_SCOPE
 )
@@ -31,10 +37,15 @@ set(
     ${cwd}/Panel.cpp
     ${cwd}/Label.cpp
     ${cwd}/Button.cpp
+    ${cwd}/Checkbox.cpp
+    ${cwd}/Slider.cpp
     ${cwd}/Entry.cpp
     ${cwd}/MenuList.cpp
     ${cwd}/DropdownButton.cpp
     ${cwd}/Combobox.cpp
+    ${cwd}/FlowPanel.cpp
+    ${cwd}/ScrollPanel.cpp
+    ${cwd}/WidgetControlFrame.cpp
 
     PARENT_SCOPE
 )

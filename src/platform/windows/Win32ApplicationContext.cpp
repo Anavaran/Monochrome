@@ -1,5 +1,6 @@
 #include "Win32ApplicationContext.h"
 #include "Win32NativeWindow.h"
+#include <thread>
 
 namespace mc {
     Win32ApplicationContext::Win32ApplicationContext(const std::string& appId)
@@ -24,8 +25,11 @@ namespace mc {
 
         // Start the application loop
         while (d_applicationRunning) {
-            for (auto& window : d_win32NativeWindowHandles) {
-                window->updatePlatformWindow();
+            MSG windowProcMessage;
+
+            if (GetMessage(&windowProcMessage, NULL, 0, NULL)) {
+                TranslateMessage(&windowProcMessage);
+                DispatchMessage(&windowProcMessage);
             }
         }
 

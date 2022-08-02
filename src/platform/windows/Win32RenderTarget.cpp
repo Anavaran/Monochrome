@@ -18,13 +18,6 @@ namespace mc {
         d_nativeWindowRenderTarget =
             D2DGraphics::createWindowRenderTarget(d_windowHandle);
 
-        d_nativeBitmapRenderTarget =
-            D2DGraphics::createBitmapRenderTarget(d_nativeWindowRenderTarget.Get());
-
-        // Initialize the front buffer
-        d_frontRenderBuffer =
-            D2DGraphics::createBitmap(d_nativeWindowRenderTarget, d_width, d_height);
-
         // Set the application context runtime
         // function for calculating text metrics.
         auto& runtimeUtilityFunctions =
@@ -66,16 +59,8 @@ namespace mc {
         UINT adjustedWidth = (UINT)(static_cast<float>(rect.right - rect.left) * d_scalingFactor);
         UINT adjustedHeight = (UINT)(static_cast<float>(rect.bottom - rect.top) * d_scalingFactor);
 
-        // Update the front buffer render target
+        // Update the render target size
         d_nativeWindowRenderTarget->Resize(D2D1::SizeU(adjustedWidth, adjustedHeight));
-
-        // Re-create the back buffer render target
-        d_nativeBitmapRenderTarget =
-            D2DGraphics::createBitmapRenderTarget(d_nativeWindowRenderTarget.Get());
-
-        // Re-create the front  buffer bitmap
-        d_frontRenderBuffer =
-            D2DGraphics::createBitmap(d_nativeWindowRenderTarget, d_width, d_height);
     }
 
     void Win32RenderTarget::_adjustPositionAndSizeForDPIScaling(
@@ -97,28 +82,20 @@ namespace mc {
         height = static_cast<uint32_t>(heightF * d_scalingFactor);
     }
 
-    void Win32RenderTarget::lockBackBuffer() {
-        d_activeRenderTarget = d_nativeBitmapRenderTarget;
-    }
-
-    void Win32RenderTarget::unlockBackBuffer() {
-        d_activeRenderTarget = d_nativeWindowRenderTarget;
-    }
-
-    void Win32RenderTarget::swapBuffers() {
-        d_frontRenderBuffer->CopyFromRenderTarget(NULL, d_nativeBitmapRenderTarget.Get(), NULL);
-    }
+    void Win32RenderTarget::lockBackBuffer() {}
+    void Win32RenderTarget::unlockBackBuffer() {}
+    void Win32RenderTarget::swapBuffers() {}
 
     void Win32RenderTarget::beginFrame() {
-        d_activeRenderTarget->BeginDraw();
+        d_nativeWindowRenderTarget->BeginDraw();
     }
 
     void Win32RenderTarget::endFrame() {
-        d_activeRenderTarget->EndDraw();
+        d_nativeWindowRenderTarget->EndDraw();
     }
 
     void Win32RenderTarget::clearScreen(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-        d_activeRenderTarget->Clear(
+        d_nativeWindowRenderTarget->Clear(
             D2D1::ColorF(
                 static_cast<float>(r) / 255.0f,
                 static_cast<float>(g) / 255.0f,
@@ -136,11 +113,11 @@ namespace mc {
             static_cast<float>(x + width),
             static_cast<float>(y + height)
         );
-        d_activeRenderTarget->PushAxisAlignedClip(bounds, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        d_nativeWindowRenderTarget->PushAxisAlignedClip(bounds, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     }
 
     void Win32RenderTarget::popClipLayer() {
-        d_activeRenderTarget->PopAxisAlignedClip();
+        d_nativeWindowRenderTarget->PopAxisAlignedClip();
     }
 
     void Win32RenderTarget::drawRectangle(
@@ -156,7 +133,7 @@ namespace mc {
         _adjustPositionAndSizeForDPIScaling(x, y, width, height);
 
         ID2D1SolidColorBrush* brush;
-        HRESULT result = d_activeRenderTarget->CreateSolidColorBrush(
+        HRESULT result = d_nativeWindowRenderTarget->CreateSolidColorBrush(
             D2D1::ColorF(
                 static_cast<float>(color.r) / 255.0f,
                 static_cast<float>(color.g) / 255.0f,
@@ -180,16 +157,57 @@ namespace mc {
                 D2D1::RoundedRect(bounds, static_cast<float>(radius), static_cast<float>(radius));
 
             if (filled)
-                d_activeRenderTarget->FillRoundedRectangle(roundedBounds, brush);
+                d_nativeWindowRenderTarget->FillRoundedRectangle(roundedBounds, brush);
             else
-                d_activeRenderTarget->DrawRoundedRectangle(roundedBounds, brush,
+                d_nativeWindowRenderTarget->DrawRoundedRectangle(roundedBounds, brush,
                     static_cast<float>(stroke));
         } else {
             if (filled)
-                d_activeRenderTarget->FillRectangle(bounds, brush);
+                d_nativeWindowRenderTarget->FillRectangle(bounds, brush);
             else
-                d_activeRenderTarget->DrawRectangle(bounds, brush, static_cast<float>(stroke));
+                d_nativeWindowRenderTarget->DrawRectangle(
+                    bounds, brush, static_cast<float>(stroke));
         }
+
+        brush->Release();
+    }
+
+    void Win32RenderTarget::drawCircle(
+        int32_t x, int32_t y,
+        uint32_t radius,
+        const Color& color,
+        bool filled,
+        uint32_t stroke
+    ) {
+        uint32_t size = radius * 2;
+        _adjustPositionAndSizeForDPIScaling(x, y, size, size);
+
+        ID2D1SolidColorBrush* brush;
+        HRESULT result = d_nativeWindowRenderTarget->CreateSolidColorBrush(
+            D2D1::ColorF(
+                static_cast<float>(color.r) / 255.0f,
+                static_cast<float>(color.g) / 255.0f,
+                static_cast<float>(color.b) / 255.0f,
+                static_cast<float>(color.a) / 255.0f
+            ),
+            &brush
+        );
+
+        CORE_ASSERT(result == S_OK, "Failed to create brush");
+
+        D2D1_ELLIPSE bounds = D2D1::Ellipse(
+            D2D1::Point2F(
+                static_cast<float>(x + size),
+                static_cast<float>(y + size)
+            ),
+            static_cast<float>(size),
+            static_cast<float>(size)
+        );
+
+        if (filled)
+            d_nativeWindowRenderTarget->FillEllipse(bounds, brush);
+        else
+            d_nativeWindowRenderTarget->DrawEllipse(bounds, brush, static_cast<float>(stroke));
 
         brush->Release();
     }
@@ -207,18 +225,41 @@ namespace mc {
         const std::string& alignment,
         const std::string& wrapMode
     ) {
+        drawText(
+            x, y,
+            width, height,
+            color,
+            utils::convertToWideString(text),
+            font,
+            fontSize,
+            fontStyle,
+            alignment,
+            wrapMode
+        );
+    }
+
+    void Win32RenderTarget::drawText(
+        int32_t x,
+        int32_t y,
+        uint32_t width,
+        uint32_t height,
+        const Color& color,
+        const std::wstring& text,
+        const std::string& font,
+        uint32_t fontSize,
+        const std::string& fontStyle,
+        const std::string& alignment,
+        const std::string& wrapMode
+    ) {
         _adjustPositionAndSizeForDPIScaling(x, y, width, height);
 
         // Adjust the font size for DPI scaling
         float fontSizeF = static_cast<float>(fontSize);
         fontSize = static_cast<uint32_t>(fontSizeF * d_scalingFactor);
 
-        // Convert text to be a wide string
-        std::wstring textW = utils::convertToWideString(text);
-
         // Create the brush
         ID2D1SolidColorBrush* brush;
-        HRESULT result = d_activeRenderTarget->CreateSolidColorBrush(
+        HRESULT result = d_nativeWindowRenderTarget->CreateSolidColorBrush(
             D2D1::ColorF(
                 static_cast<float>(color.r) / 255.0f,
                 static_cast<float>(color.g) / 255.0f,
@@ -273,8 +314,8 @@ namespace mc {
         format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         format->SetWordWrapping(dwWrapMode);
 
-        d_activeRenderTarget->DrawTextW(
-            textW.c_str(),
+        d_nativeWindowRenderTarget->DrawTextW(
+            text.c_str(),
             (UINT32)text.size(),
             format,
             D2D1::RectF(
@@ -289,34 +330,6 @@ namespace mc {
 
         brush->Release();
         format->Release();
-    }
-
-    void Win32RenderTarget::__drawFrontBufferBitmap() {
-        d_nativeWindowRenderTarget->BeginDraw();
-
-        D2D1_RECT_F srcRect = D2D1::RectF(
-            0.0f,
-            0.0f,
-            d_frontRenderBuffer->GetSize().width,
-            d_frontRenderBuffer->GetSize().height
-        );
-
-        D2D1_RECT_F destRect = D2D1::RectF(
-            0.0f,
-            0.0f,
-            static_cast<float>(d_width),
-            static_cast<float>(d_height)
-        );
-
-        d_nativeWindowRenderTarget->DrawBitmap(
-            d_frontRenderBuffer.Get(),
-            srcRect,
-            1.0f,
-            D2D1_BITMAP_INTERPOLATION_MODE::D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-            destRect
-        );
-
-        d_nativeWindowRenderTarget->EndDraw();
     }
 
     std::pair<float, float> Win32RenderTarget::runtimeCalculateTextSize(
