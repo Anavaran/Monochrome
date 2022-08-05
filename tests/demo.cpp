@@ -225,11 +225,55 @@ int firstDemo() {
     slider->on("valueChanged", [slider](auto e){ printf("Value changed: %i\n", slider->value.get()); });
     window->addWidget(slider);
 
+    auto progressBar = MakeRef<ProgressBar>();
+    progressBar->position = { 700, 100 };
+    progressBar->size = { 200, 30 };
+    progressBar->borderColor = Color::red;
+    progressBar->color = Color::red;
+    progressBar->borderSize = 2;
+    window->addWidget(progressBar);
+
+    auto taskBox1 = MakeRef<Checkbox>();    
+    taskBox1->position = { 700, 130 };
+    taskBox1->text = "Task1";
+    taskBox1->displayCheckmark = true;
+    taskBox1->checkmarkColor = Color(0, 100, 0);
+    taskBox1->color = Color::green;
+    taskBox1->checkedColor = Color(224, 146, 213);
+    taskBox1->on("valueChanged", [progressBar, taskBox1](auto e) {
+        bool isChecked = taskBox1->checked;
+        if (isChecked) {
+            progressBar->progression = 100;
+        }
+        else if (isChecked == false) {
+            progressBar->progression = 0;
+        }
+    });
+    window->addWidget(taskBox1);
+
+    auto taskBox2 = MakeRef<Checkbox>();
+    taskBox2->position = { 700, 160 };
+    taskBox2->text = "Task2";
+    taskBox2->displayCheckmark = true;
+    taskBox2->checkmarkColor = Color(0, 100, 0);
+    taskBox2->color = Color::green;
+    taskBox2->checkedColor = Color(224, 146, 213);
+    taskBox2->on("valueChanged", [progressBar, taskBox2](auto e) {
+        bool isChecked = taskBox2->checked;
+        if (isChecked) {
+            progressBar->progression = 100;
+        }
+        else if (isChecked == false) {
+            progressBar->progression = 0;
+        }
+     });
+    window->addWidget(taskBox2);
+
     AppManager::startApplicationLoop();
     return 0;
 }
 
-int flowpanelDemo() {
+int flowpanelDemo() {       
     AppManager::registerApplication("appId-032483");
 
     auto window = MakeRef<ModernWindow>(1060, 660, "Flowpanel Demo");
@@ -273,5 +317,5 @@ int flowpanelDemo() {
 }
 
 int main() {
-    return flowpanelDemo();
+    return firstDemo();
 }

@@ -23,6 +23,7 @@ set(
     ${cwd}/ScrollPanel.h
     ${cwd}/CustomRenderedWidget.h
     ${cwd}/WidgetControlFrame.h
+    ${cwd}/ProgressBar.h
 
     PARENT_SCOPE
 )
@@ -46,6 +47,7 @@ set(
     ${cwd}/FlowPanel.cpp
     ${cwd}/ScrollPanel.cpp
     ${cwd}/WidgetControlFrame.cpp
+    ${cwd}/ProgressBar.cpp
 
     PARENT_SCOPE
 )

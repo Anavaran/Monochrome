@@ -11,3 +11,4 @@
 #include "DropdownButton.h"
 #include "Combobox.h"
 #include "WidgetControlFrame.h"
+#include "ProgressBar.h"
