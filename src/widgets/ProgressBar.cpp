@@ -29,6 +29,7 @@ namespace mc {
 			true,
 			0
 		);
+
 	}
 
 	void ProgressBar::_setupProperties() {
@@ -38,5 +39,14 @@ namespace mc {
 
 		borderColor = Color::red;
 		borderColor.forwardEmittedEvents(this);
+
+		minValue = -50;
+		minValue.forwardEmittedEvents(this);
+
+		maxValue = 50;
+		maxValue.forwardEmittedEvents(this);
+
+		value = 0;
+		value.forwardEmittedEvents(this);
 	}
 }

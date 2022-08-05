@@ -227,7 +227,7 @@ int firstDemo() {
 
     auto progressBar = MakeRef<ProgressBar>();
     progressBar->position = { 700, 100 };
-    progressBar->size = { 200, 30 };
+    progressBar->size = { 200, 20 };
     progressBar->borderColor = Color::red;
     progressBar->color = Color::red;
     progressBar->borderSize = 2;
@@ -261,7 +261,7 @@ int firstDemo() {
     taskBox2->on("valueChanged", [progressBar, taskBox2](auto e) {
         bool isChecked = taskBox2->checked;
         if (isChecked) {
-            progressBar->progression = 100;
+            progressBar->progression = progressBar->progression + 100;
         }
         else if (isChecked == false) {
             progressBar->progression = 0;

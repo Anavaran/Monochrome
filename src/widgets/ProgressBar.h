@@ -15,8 +15,19 @@ public:
 	//Fill in the progress bar
 	PropertyObserver<Color>         progressColor;
 
-	//public value 
+	//progression value 
 	PropertyObserver<uint32_t>      progression;
+
+    //Minimum value
+	PropertyObserver<int32_t>       minValue;
+
+	//Maximum value
+	PropertyObserver<int32_t>       maxValue;
+
+	//Current progress
+	PropertyObserver<int32_t>       value;
+
+
 
 	void onRender(
 		Shared<RenderTarget>& renderTarget,
